@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+`timescale 1ns/1ps
 `default_nettype none
 
 module tt_um_pouyahatami_protocol_emulator (
