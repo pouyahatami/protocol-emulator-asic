@@ -1,20 +1,13 @@
-<!---
-
-This file is used to generate your project datasheet. Please fill in the information below and delete any unused
-sections.
-
-You can also include images in this folder and reference them in the markdown. Each image must be less than
-512 kb in size, and the combined size of all images must be less than 1 MB.
--->
-
 ## How it works
 
-Explain how your project works
+This project will implement a firmware-programmable engine for deterministic pin input/output. The architecture and instruction set are currently under evaluation.
+
+The checked-in Stage-0 design is intentionally inert: all dedicated outputs are low and all bidirectional pins are released. It exists to validate the IHP CMOS5L Tiny Tapeout build flow before functional logic is added.
 
 ## How to test
 
-Explain how to use your project
+No functional protocol test is available at this stage. Run the cocotb test in `test/` to confirm that the skeleton never drives the bidirectional pins and keeps all outputs low.
 
 ## External hardware
 
-List external hardware used in your project (e.g. PMOD, LED display, etc), if any
+None is required for the Stage-0 skeleton. Requirements for later protocol demonstrations have not yet been selected.

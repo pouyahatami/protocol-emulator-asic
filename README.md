@@ -1,42 +1,42 @@
-![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
+# Programmable Protocol Emulator ASIC
 
-# Tiny Tapeout Verilog Project Template
+An open-source entry for [Jane Street's protocol emulator ASIC competition](https://blog.janestreet.com/protocol-emulator-asic-competition/).
 
-- [Read the documentation for project](docs/info.md)
+The goal is a small, deterministic processor specialized for timed pin input/output. Protocol behavior will be supplied as firmware so the same silicon can implement UART, SPI, I2C, and other protocols within its timing and I/O limits.
 
-## What is Tiny Tapeout?
+## Status
 
-Tiny Tapeout is an educational project that aims to make it easier and cheaper than ever to get your digital and analog designs manufactured on a real chip.
+Stage 0: repository skeleton. The architecture and instruction set are not frozen. The current RTL is deliberately inert and exists only to validate the toolchain before functional logic is added.
 
-To learn more and get started, visit https://tinytapeout.com.
+## Repository map
 
-## Set up your Verilog project
+```text
+docs/
+  info.md              Tiny Tapeout-facing datasheet
+  spec/                accepted implementation specifications
+firmware/              protocol programs and fixtures (planned)
+formal/                formal harnesses and properties (planned)
+model/                 cycle-accurate reference model (planned)
+src/                   synthesizable RTL
+test/                  cocotb simulation tests
+info.yaml              Tiny Tapeout metadata and pinout
+```
 
-1. Add your Verilog files to the `src` folder.
-2. Edit the [info.yaml](info.yaml) and update information about your project, paying special attention to the `source_files` and `top_module` properties. If you are upgrading an existing Tiny Tapeout project, check out our [online info.yaml migration tool](https://tinytapeout.github.io/tt-yaml-upgrade-tool/).
-3. Edit [docs/info.md](docs/info.md) and add a description of your project.
-4. Adapt the testbench to your design. See [test/README.md](test/README.md) for more information.
+This repository is based on the `cmos5l` branch of the official [Tiny Tapeout IHP Verilog template](https://github.com/TinyTapeout/ttihp-verilog-template).
 
-The GitHub action will automatically build the ASIC files using [LibreLane](https://www.zerotoasiccourse.com/terminology/librelane/).
+## Development
 
-## Enable GitHub actions to build the results page
+The exact local setup instructions are still being validated. The template test can be run from `test/` with:
 
-- [Enabling GitHub Pages](https://tinytapeout.com/faq/#my-github-action-is-failing-on-the-pages-part)
+```sh
+python -m pip install -r requirements.txt
+make -B
+```
 
-## Resources
+See [CLAUDE.md](CLAUDE.md) for repository working conventions and [docs/spec/README.md](docs/spec/README.md) for specification status.
 
-- [FAQ](https://tinytapeout.com/faq/)
-- [Digital design lessons](https://tinytapeout.com/digital_design/)
-- [Learn how semiconductors work](https://tinytapeout.com/siliwiz/)
-- [Join the community](https://tinytapeout.com/discord)
-- [Build your design locally](https://www.tinytapeout.com/guides/local-hardening/)
+Research and design alternatives live in the separate [`protocol-emulator-research`](https://github.com/pouyahatami/protocol-emulator-research) repository.
 
-## What next?
+## License
 
-- [Submit your design to the next shuttle](https://app.tinytapeout.com/).
-- Edit [this README](README.md) and explain your design, how it works, and how to test it.
-- Share your project on your social network of choice:
-  - LinkedIn [#tinytapeout](https://www.linkedin.com/search/results/content/?keywords=%23tinytapeout) [@TinyTapeout](https://www.linkedin.com/company/100708654/)
-  - Mastodon [#tinytapeout](https://chaos.social/tags/tinytapeout) [@matthewvenn](https://chaos.social/@matthewvenn)
-  - X (formerly Twitter) [#tinytapeout](https://twitter.com/hashtag/tinytapeout) [@tinytapeout](https://twitter.com/tinytapeout)
-  - Bluesky [@tinytapeout.com](https://bsky.app/profile/tinytapeout.com)
+Apache-2.0. See [LICENSE](LICENSE).
