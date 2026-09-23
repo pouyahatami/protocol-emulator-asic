@@ -23,34 +23,34 @@ project:
 # This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).
 pinout:
   # Inputs
-  ui[0]: "unused_input_0"
-  ui[1]: "unused_input_1"
-  ui[2]: "unused_input_2"
-  ui[3]: "unused_input_3"
-  ui[4]: "unused_input_4"
-  ui[5]: "unused_input_5"
-  ui[6]: "unused_input_6"
-  ui[7]: "unused_input_7"
+  ui[0]: "stage0_operand_a[0]"
+  ui[1]: "stage0_operand_a[1]"
+  ui[2]: "stage0_operand_a[2]"
+  ui[3]: "stage0_operand_a[3]"
+  ui[4]: "stage0_operand_a[4]"
+  ui[5]: "stage0_operand_a[5]"
+  ui[6]: "stage0_operand_a[6]"
+  ui[7]: "stage0_operand_a[7]"
 
   # Outputs
-  uo[0]: "unused_output_0"
-  uo[1]: "unused_output_1"
-  uo[2]: "unused_output_2"
-  uo[3]: "unused_output_3"
-  uo[4]: "unused_output_4"
-  uo[5]: "unused_output_5"
-  uo[6]: "unused_output_6"
-  uo[7]: "unused_output_7"
+  uo[0]: "stage0_digest[0]"
+  uo[1]: "stage0_digest[1]"
+  uo[2]: "stage0_digest[2]"
+  uo[3]: "stage0_digest[3]"
+  uo[4]: "stage0_digest[4]"
+  uo[5]: "stage0_digest[5]"
+  uo[6]: "stage0_digest[6]"
+  uo[7]: "stage0_digest[7]"
 
   # Bidirectional pins
-  uio[0]: "unused_bidir_0"
-  uio[1]: "unused_bidir_1"
-  uio[2]: "unused_bidir_2"
-  uio[3]: "unused_bidir_3"
-  uio[4]: "unused_bidir_4"
-  uio[5]: "unused_bidir_5"
-  uio[6]: "unused_bidir_6"
-  uio[7]: "unused_bidir_7"
+  uio[0]: "stage0_operand_b[0] (input only)"
+  uio[1]: "stage0_operand_b[1] (input only)"
+  uio[2]: "stage0_operand_b[2] (input only)"
+  uio[3]: "stage0_operand_b[3] (input only)"
+  uio[4]: "stage0_operand_b[4] (input only)"
+  uio[5]: "stage0_operand_b[5] (input only)"
+  uio[6]: "stage0_operand_b[6] (input only)"
+  uio[7]: "stage0_operand_b[7] (input only)"
 
 # Do not change!
 yaml_version: 6
