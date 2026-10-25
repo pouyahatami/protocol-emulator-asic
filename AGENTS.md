@@ -36,9 +36,15 @@ Flag conflicts and update the lower-priority source.
 - Keep synthesizable design files under `src/`, as required by the template.
 - Use `default_nettype none` and restore `default_nettype wire` at the end of compilation units.
 - Use explicit widths and avoid implicit nets.
+- Declare signals and ports as `logic`. Use `wire` only for a net with more than one driver,
+  and keep the top-level port list as the Tiny Tapeout template defines it.
 - Keep clocked and combinational logic clearly separated.
 - Use nonblocking assignments in sequential logic.
+- Use the same file header in every source file.
+- Keep the module comment short: state what the module does and its key constraints. Put the
+  full explanation in the documentation, not in the source file.
 - Give comments full sentences and explain intent or constraints, not obvious syntax.
+- Do not end a code comment with a period. Periods between sentences inside a comment stay.
 - Prefer lines at or below 100 characters.
 - Use LF line endings and end every text file with a newline.
 
@@ -47,6 +53,9 @@ Flag conflicts and update the lower-priority source.
 Run the smallest relevant test first, then the complete available regression. Verification is expected to grow through directed simulation, protocol conformance, differential model checking, constrained-random testing, formal properties, gate-level simulation, and physical checks.
 
 A feature is incomplete until intended timing and failure behavior are tested.
+
+Name each testbench after the module it tests with a `_tb` suffix, for example `sync_2ff_tb.sv`
+for `sync_2ff`. The top-level `test/tb.v` keeps the name the Tiny Tapeout template gives it.
 
 ## Repository boundary
 
