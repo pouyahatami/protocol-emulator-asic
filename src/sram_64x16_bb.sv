@@ -12,14 +12,14 @@
 `ifndef SIM
 (* blackbox *)
 module RM_IHPSG13_1P_64x16_c2 (
-    input  wire        A_CLK,
-    input  wire        A_MEN,
-    input  wire        A_WEN,
-    input  wire        A_REN,
-    input  wire [5:0]  A_ADDR,
-    input  wire [15:0] A_DIN,
-    input  wire        A_DLY,
-    output wire [15:0] A_DOUT
+    input  logic        A_CLK,
+    input  logic        A_MEN,
+    input  logic        A_WEN,
+    input  logic        A_REN,
+    input  logic [5:0]  A_ADDR,
+    input  logic [15:0] A_DIN,
+    input  logic        A_DLY,
+    output logic [15:0] A_DOUT
 );
 endmodule
 `endif
