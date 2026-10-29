@@ -40,8 +40,8 @@ module bootloader #(
     WRITE_ADDRESS,
     WRITE_DATA,
     READ_ADDRESS,
-    READ_WAIT,
-    READ_DATA,
+    READ_FIRST,
+    READ_STREAM,
     IGNORE
   } state_t;
 
@@ -110,32 +110,32 @@ module bootloader #(
       end
 
       // addr_q is not loaded until the end of this cycle, so the first read takes its address
-      // from rx_word directly. This keeps READ_WAIT at one cycle
+      // from rx_word directly. The first word is then in sram_dout during READ_FIRST
       READ_ADDRESS: begin
         if (word_valid) begin
           sram_men  = 1'b1;
           sram_ren  = 1'b1;
           sram_addr = rx_word[ADDR_WIDTH-1:0];
           addr_d    = rx_word[ADDR_WIDTH-1:0] + ADDR_WIDTH'(1);
-          state_d   = READ_WAIT;
+          state_d   = READ_FIRST;
         end
       end
 
       // sram_dout holds the first word in this cycle. Hand it to the slave and prefetch the
       // next word; the slave samples tx_word before the SRAM output changes
-      READ_WAIT: begin
+      READ_FIRST: begin
         if (cs_asserted) begin
           tx_load  = 1'b1;
           sram_men = 1'b1;
           sram_ren = 1'b1;
           addr_d   = addr_q + ADDR_WIDTH'(1);
         end
-        state_d = READ_DATA;
+        state_d = READ_STREAM;
       end
 
       // Each word_ready means the previous word has left the slave. The prefetched word is
       // handed over and the next one is fetched, which hides the SRAM's one-cycle latency
-      READ_DATA: begin
+      READ_STREAM: begin
         if (word_valid) begin
           tx_load  = 1'b1;
           sram_men = 1'b1;
