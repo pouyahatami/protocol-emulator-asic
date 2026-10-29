@@ -57,6 +57,12 @@ A feature is incomplete until intended timing and failure behavior are tested.
 Name each testbench after the module it tests with a `_tb` suffix, for example `sync_2ff_tb.sv`
 for `sync_2ff`. The top-level `test/tb.v` keeps the name the Tiny Tapeout template gives it.
 
+Do not use banner comments in a testbench, such as a label between two lines of dashes
+(`// ----`). Separate sections with a blank line.
+
+In a testbench, drive the design's inputs on the falling edge of the clock and check its outputs
+on the rising edge. Do not use `#` delays to move stimulus away from a clock edge.
+
 ## Repository boundary
 
 Implementation and required submission documents belong here. Literature notes, alternatives, calculations, and unresolved decisions belong in [`pouyahatami/protocol-emulator-research`](https://github.com/pouyahatami/protocol-emulator-research).
