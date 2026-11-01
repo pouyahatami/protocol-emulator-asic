@@ -5,7 +5,8 @@
 SIM ?= icarus
 FST ?= -fst # Use more efficient FST format
 TOPLEVEL_LANG ?= verilog
-SRC_DIR = $(PWD)/../src
+# Relative so that make prerequisites survive a checkout path that contains spaces
+SRC_DIR = ../src
 PROJECT_SOURCES = project.v
 
 ifneq ($(GATES),yes)
@@ -26,7 +27,7 @@ VERILOG_SOURCES += $(PDK_ROOT)/ihp-sg13cmos5l/libs.ref/sg13cmos5l_stdcell/verilo
 VERILOG_SOURCES += $(PDK_ROOT)/ihp-sg13cmos5l/libs.ref/sg13cmos5l_stdcell/verilog/sg13cmos5l_stdcell.v
 
 # this gets copied in by the GDS action workflow
-VERILOG_SOURCES += $(PWD)/gate_level_netlist.v
+VERILOG_SOURCES += gate_level_netlist.v
 
 endif
 
@@ -34,7 +35,7 @@ endif
 COMPILE_ARGS 		+= -I$(SRC_DIR)
 
 # Include the testbench sources:
-VERILOG_SOURCES += $(PWD)/tb.v
+VERILOG_SOURCES += tb.v
 TOPLEVEL = tb
 
 # List test modules to run, separated by commas and without the .py suffix:
