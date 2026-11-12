@@ -27,13 +27,15 @@ module pio_sm_ctrl (
     output logic       active
 );
 
-  localparam logic [1:0] Disabled = 2'b00;
-  localparam logic [1:0] Exec     = 2'b01;
-  localparam logic [1:0] Stall    = 2'b10;
-  localparam logic [1:0] Delay    = 2'b11;
+  typedef enum logic [1:0] {
+    Disabled = 2'b00,
+    Exec     = 2'b01,
+    Stall    = 2'b10,
+    Delay    = 2'b11
+  } state_e;
 
-  logic [1:0] state;
-  logic [1:0] state_next;
+  state_e state;
+  state_e state_next;
 
   always_ff @(posedge clk) begin
     if (!rst_n) begin
