@@ -1,0 +1,19 @@
+[tasks]
+prove
+cover
+
+[options]
+prove: mode prove
+cover: mode cover
+depth 20
+
+[engines]
+smtbmc boolector
+
+[script]
+read_verilog -sv -formal pio_sm_ctrl.sv pio_sm_ctrl_formal.sv
+prep -top pio_sm_ctrl_formal
+
+[files]
+../../src/pio/pio_sm_ctrl.sv
+pio_sm_ctrl_formal.sv

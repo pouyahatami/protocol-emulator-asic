@@ -12,3 +12,7 @@ test/__pycache__/
 test/results.xml
 test/results_*.xml
 test/gate_level_netlist.v
+test/formal/*_bmc/
+test/formal/*_cover/
+test/formal/*_prove/
+test/formal/*/status.sqlite

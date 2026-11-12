@@ -40,6 +40,8 @@ Flag conflicts and update the lower-priority source.
   and keep the top-level port list as the Tiny Tapeout template defines it.
 - Keep clocked and combinational logic clearly separated.
 - Use nonblocking assignments in sequential logic.
+- Declare FSM states as a `typedef enum logic [N:0]` with explicit encodings, so waveform
+  viewers show state names. Use `localparam` for other constants.
 - Use the same file header in every source file.
 - Keep the module comment short: state what the module does and its key constraints. Put the
   full explanation in the documentation, not in the source file.

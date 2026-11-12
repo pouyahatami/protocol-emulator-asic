@@ -1,0 +1,39 @@
+name: formal
+on: [push, workflow_dispatch]
+jobs:
+  formal:
+    runs-on: ubuntu-24.04
+    env:
+      # Same OSS CAD Suite build as the local WSL setup, so CI and local runs use the same Yosys
+      OSS_CAD_SUITE_DATE: 2026-11-07
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Install OSS CAD Suite
+        shell: bash
+        run: |
+          tag="${OSS_CAD_SUITE_DATE}"
+          name="oss-cad-suite-linux-x64-${tag//-/}.tgz"
+          curl -fsSL -o "$RUNNER_TEMP/$name" \
+            "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/$tag/$name"
+          tar -xzf "$RUNNER_TEMP/$name" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/oss-cad-suite/bin" >> "$GITHUB_PATH"
+
+      - name: Show tool versions
+        run: |
+          yosys -V
+          sby --version
+
+      # Runs every job listed in FORMAL in the Makefile. -k runs the remaining jobs after a failure
+      - name: Run formal jobs
+        run: make -k formal
+
+      - name: Upload logs and traces
+        if: success() || failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: formal-results
+          path: |
+            test/formal/*_*/logfile.txt
+            test/formal/*_*/engine_*/*.vcd

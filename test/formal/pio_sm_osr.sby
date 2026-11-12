@@ -1,0 +1,19 @@
+[tasks]
+bmc
+cover
+
+[options]
+bmc: mode bmc
+cover: mode cover
+depth 20
+
+[engines]
+smtbmc boolector
+
+[script]
+read_verilog -sv -formal pio_sm_osr.sv pio_sm_osr_formal.sv
+prep -top pio_sm_osr_formal
+
+[files]
+../../src/pio/pio_sm_osr.sv
+pio_sm_osr_formal.sv
