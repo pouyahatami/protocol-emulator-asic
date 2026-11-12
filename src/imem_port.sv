@@ -6,14 +6,12 @@
 `timescale 1ns/1ps
 `default_nettype none
 
-// Joins the two 64x16 instruction SRAMs into one 128-word memory with a single access port.
-// Address bit 6 selects the macro: 0 addresses i_imem0 and 1 addresses i_imem1. The read latency
-// is one clock cycle, the same as a single macro
+// Joins the two 64x16 instruction SRAMs into one 128-word memory; see docs/imem_port.md
 module imem_port (
     input  logic        clk,
     input  logic        rst_n,
 
-    // Access port. The signals have the same meaning and timing as the macro pins
+    // Access port, with the same signal meaning and timing as the macro pins
     input  logic        men,
     input  logic        wen,
     input  logic        ren,
@@ -21,8 +19,7 @@ module imem_port (
     input  logic [15:0] din,
     output logic [15:0] dout,
 
-    // Macro side. Only the memory enable differs between the two macros; the other inputs are
-    // shared
+    // Macro side. Only the memory enables are separate per macro
     output logic        mem0_men,
     output logic        mem1_men,
     output logic        mem_wen,
@@ -33,9 +30,7 @@ module imem_port (
     input  logic [15:0] mem1_dout
 );
 
-  // Bank of the word currently held on the macro outputs. A macro's output changes only after a
-  // read access, so the bank is captured on reads only. A write or an idle cycle leaves it
-  // unchanged, and dout keeps showing the last word read
+  // Captured on reads only, because a macro output changes only after a read
   logic read_bank_q;
 
   always_ff @(posedge clk) begin

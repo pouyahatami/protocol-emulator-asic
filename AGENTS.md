@@ -41,8 +41,11 @@ Flag conflicts and update the lower-priority source.
 - Keep clocked and combinational logic clearly separated.
 - Use nonblocking assignments in sequential logic.
 - Use the same file header in every source file.
-- Keep the module comment short: state what the module does and its key constraints. Put the
-  full explanation in the documentation, not in the source file.
+- Keep the module comment to one line that states what the module does. Put the explanation,
+  such as address decoding, latency, and key constraints, in a Markdown document under `docs/`,
+  not in the source file.
+- Avoid multi-line comments. Use one only when a short comment cannot capture a non-obvious
+  constraint, such as a timing hazard, and move any longer explanation to the Markdown document.
 - Give comments full sentences and explain intent or constraints, not obvious syntax.
 - Do not end a code comment with a period. Periods between sentences inside a comment stay.
 - Prefer lines at or below 100 characters.

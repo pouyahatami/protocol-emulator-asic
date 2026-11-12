@@ -10,7 +10,8 @@
 // external host load and read back the program image. Incoming SPI words are decoded as host
 // commands and turned into SRAM write and read accesses
 module bootloader #(
-    parameter int ADDR_WIDTH = 6 
+    // 7 bits address the 128 words of imem_port
+    parameter int ADDR_WIDTH = 7
 ) (
     input  logic              clk,
     input  logic              rst_n,       
