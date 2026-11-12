@@ -4,7 +4,7 @@ Read this file before changing the repository.
 
 ## Project
 
-This repository implements a firmware-programmable protocol-emulator ASIC for the Jane Street competition. The target is Tiny Tapeout's IHP 130 nm CMOS5L flow with a 6x4 tile allocation.
+This repository implements a firmware-programmable protocol-emulator ASIC for the Jane Street competition. The target is Tiny Tapeout's IHP 130 nm CMOS5L flow with an 8x4 tile allocation.
 
 The project is in Stage 0. The architecture and ISA are not final. UART, SPI, and I2C are required demonstration workloads, not fixed-function blocks.
 
