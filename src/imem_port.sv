@@ -39,8 +39,8 @@ module imem_port (
   end
 
   always_comb begin
-    mem0_men = men & ~addr[6];
-    mem1_men = men &  addr[6];
+    mem0_men = men && (addr[6] == 1'b0);
+    mem1_men = men && (addr[6] == 1'b1);
     mem_wen  = wen;
     mem_ren  = ren;
     mem_addr = addr[5:0];

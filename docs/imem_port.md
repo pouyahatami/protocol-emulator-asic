@@ -23,7 +23,7 @@ The IHP library has no 128x16 macro; the next size is 256x16.
 | `addr` | in | 7 | Word address |
 | `din` | in | 16 | Write data |
 | `dout` | out | 16 | Read data |
-| `mem0_men`, `mem1_men` | out | 1 each | Memory enable of `i_imem0` and `i_imem1`. At most one is high: `men & ~addr[6]` and `men & addr[6]` |
+| `mem0_men`, `mem1_men` | out | 1 each | Memory enable of `i_imem0` and `i_imem1`. At most one is high: `men && (addr[6] == 1'b0)` and `men && (addr[6] == 1'b1)` |
 | `mem_wen`, `mem_ren` | out | 1 each | Write and read enable, connected to both macros |
 | `mem_addr` | out | 6 | `addr[5:0]`, connected to both macros |
 | `mem_din` | out | 16 | `din`, connected to both macros |
