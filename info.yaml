@@ -8,7 +8,7 @@ project:
   clock_hz:     50000000 # Initial target; update if implementation results require it
 
   # How many tiles your design occupies? A single tile is about 167x108 uM.
-  tiles: "6x4"          # Competition allocation
+  tiles: "8x4"          # Competition allocation
 
   # Your top module name must start with "tt_um_". Make it unique by including your github username:
   top_module:  "tt_um_pouyahatami_protocol_emulator"
