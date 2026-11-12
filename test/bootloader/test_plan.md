@@ -7,23 +7,31 @@ Verification plan for `src/bootloader.sv`. The testbench is `test/bootloader/boo
 The testbench must show that two interfaces are sound:
 
 1. **SPI slave interface.** The bootloader accepts words only while chip select is asserted, decodes commands and loads read data into the slave at the correct time.
-2. **SRAM macro interface.** The bootloader drives `RM_IHPSG13_1P_64x16_c2` within the macro's rules and accounts for its one-cycle read latency.
+2. **SRAM macro interface.** The bootloader drives the two `RM_IHPSG13_1P_64x16_c2` macros through `imem_port` within the macro's rules and accounts for the one-cycle read latency.
 
 ## Approach
 
 ### Structure
 
-The testbench wires the bootloader to a simulation model of the real SRAM, and plays the part of the SPI slave itself:
+The testbench wires the bootloader to `imem_port` and two simulation models of the real SRAM, as in the top level, and plays the part of the SPI slave itself:
 
 ```
- testbench (acts as SPI slave)          bootloader_instance          sram_instance
- cs_asserted, word_ready, rx_word  -->                        --> men, wen, ren, addr, din
- tx_word, tx_load                  <--                        <-- dout
+ testbench (acts as SPI slave)
+   | cs_asserted, word_ready, rx_word                 ^ tx_word, tx_load
+   v                                                  |
+ bootloader_instance
+   | men, wen, ren, addr[6:0], din                    ^ dout
+   v                                                  |
+ imem_port_instance (addr[6] selects the macro)
+   | mem0_men, mem1_men; shared wen, ren, addr[5:0], din   ^ mem0_dout, mem1_dout
+   v                                                       |
+ imem0_instance, imem1_instance
 ```
 
 - `bootloader_instance` is the design under test.
-- `sram_instance` is IHP's behavioural model of the SRAM macro, copied from the PDK into `test/ihp_sram/`. It is compiled with `FUNCTIONAL` defined, which selects the zero-delay variant without timing checks. `A_DLY` is tied high, as the datasheet requires.
-- The SRAM model is the memory itself. The testbench never drives the SRAM port; it only observes it.
+- `imem_port_instance` joins the two macros into one 128-word memory. Its own unit testbench is `test/imem_port/imem_port_tb.sv`.
+- `imem0_instance` and `imem1_instance` are IHP's behavioural model of the SRAM macro, copied from the PDK into `test/ihp_sram/`. They are compiled with `FUNCTIONAL` defined, which selects the zero-delay variant without timing checks. `A_DLY` is tied high, as the datasheet requires.
+- The SRAM models are the memory itself. The testbench never drives the memory port; it only observes it.
 
 ### Timing convention
 
@@ -42,7 +50,7 @@ The testbench wires the bootloader to a simulation model of the real SRAM, and p
 
 Tests that need a non-standard transfer, such as an unknown opcode, drive `cs_asserted` and call `send_word` directly.
 
-Bursts wrap at the end of the SRAM, for example addresses 62, 63, 0, 1. The testbench models this with `% DEPTH` wherever it computes an address.
+Bursts wrap at the end of the 128-word memory, for example addresses 126, 127, 0, 1. The testbench models this with `% DEPTH` wherever it computes an address.
 
 ### Monitor and checks
 
@@ -76,9 +84,10 @@ Each failed check increments `errors` and reports `$error`. At the end, the test
 |---|---|---|---|---|
 | T1 | `test_write_then_read_burst` | Write 8 random words at address 5, then read 8 words from address 5 | 8 SRAM writes; the read returns the written data | Both |
 | T2 | `test_length_one_bursts` | Write one word at address 17, then read one word | One write; the read returns that word | Both |
-| T3 | `test_address_wraps_at_end_of_sram` | Write 4 words at address 62, read them back, then read 2 words from address 0 | The read returns the data; addresses 0 and 1 hold the third and fourth words | SRAM |
+| T3 | `test_address_wraps_at_end_of_sram` | Write 4 words at address 126, read them back, then read 2 words from address 0 | The read returns the data; addresses 0 and 1 hold the third and fourth words | SRAM |
 | T4 | `test_unknown_opcode_is_ignored` | Send `0x1234`, then words that look like a write command | No SRAM write and no `tx_load`; the next transfer is decoded normally | SPI |
 | T5 | `test_chip_select_ends_transfer` | (a) Deassert chip select after the address, then start a new write. (b) Send a word while chip select is deasserted | (a) The new transfer starts from a new opcode. (b) That word is never written | SPI |
+| T6 | `test_burst_crosses_macro_boundary` | Write 4 words at address 62, read them back, then read 2 words from address 62 | The read returns the data across addresses 63 and 64, where the burst moves from `i_imem0` to `i_imem1`; addresses 62 and 63 are not overwritten by 64 and 65 | SRAM |
 
 To confirm the tests detect faults, two faults were added to copies of the bootloader: `READ_ADDRESS` using `addr_q` instead of `rx_word`, and `WRITE_DATA` incrementing the address by 2. The testbench reported errors for both.
 
@@ -90,11 +99,11 @@ To confirm the tests detect faults, two faults were added to copies of the bootl
 | P2 | Reset during a burst | `rst_n` low in the middle of a write and of a read; the bootloader returns to IDLE and no write is issued | Both |
 | P3 | Chip select deasserted in `READ_FIRST` | The early-termination path that skips the load | SPI |
 | P4 | Chip select deasserted in the same cycle as `word_ready` | The boundary case of the `word_valid` qualification | SPI |
-| P5 | Full-memory write and read | All 64 addresses, including wrap during a read | SRAM |
+| P5 | Full-memory write and read | All 128 addresses, including wrap during a read | SRAM |
 | P6 | Back-to-back transfers with one idle cycle, without reset | No state from one transfer leaks into the next | SPI |
 | P7 | Read of a word written in the same cycle | Not reachable with this protocol; record as not applicable once confirmed | SRAM |
 | P8 | Random command sequences against a reference memory | Broad coverage once the directed tests pass | Both |
-| P9 | Address word with upper bits set, such as `0x0045` | Only the low 6 bits are used, so this addresses word 5 | SRAM |
+| P9 | Address word with upper bits set, such as `0x0085` | Only the low 7 bits are used, so this addresses word 5 | SRAM |
 | P10 | FSM state and transition coverage | Show that every state and transition is reached by the tests | Both |
 
 ## Formal properties
@@ -116,11 +125,11 @@ Candidate properties, to be written as assertions on `bootloader` once a formal 
 - **Can the monitor's rules move to formal properties, and can SymbiYosys check them?** The `men`/`wen`/`ren` rules can, and they are listed under formal properties. Once they are assertions in the RTL, they also run in simulation, and the testbench can drop its copies. Open-source Yosys supports immediate `assert` inside `always` blocks; full concurrent SVA needs the commercial Verific front end. The X check stays in simulation, because formal tools do not model X the way a simulator does.
 - **Should there be a property that `men` never goes low?** No. `men` is low whenever there is no access, which is intended. The useful property is the reverse: `wen` or `ren` high implies `men` high.
 - **Can formal prove that `men` low is a no-op, whatever `wen` and `ren` are?** Not for this design. That is a property of the SRAM macro, which is a black box. The datasheet guarantees it. The bootloader's side is the property that `wen` and `ren` stay low while `men` is low.
-- **The SRAM has no initial value, unlike an FPGA. How is it cleared?** The contents are undefined until written. Either the host writes the whole image before the program runs, or a clear command walks all 64 addresses and writes zeros, which takes 64 cycles per memory. The program must never run from an unwritten word.
+- **The SRAM has no initial value, unlike an FPGA. How is it cleared?** The contents are undefined until written. Either the host writes the whole image before the program runs, or a clear command walks all 128 addresses and writes zeros, which takes 128 cycles. The program must never run from an unwritten word.
 - **Should every test start with a reset?** Yes for directed tests, so that one failure does not cascade into the rest. P6 covers back-to-back transfers without reset.
 - **Should chip select changing in the middle of a transfer be tested?** Deassertion mid-burst is covered by T5, P3 and P4. Chip select changing in the middle of a word is handled by the SPI slave's bit counter, and belongs in the slave's testbench.
-- **Should an invalid address be tested?** Every 6-bit address is valid, and the upper 10 bits of the address word are ignored. P9 checks that they are ignored.
-- **The design needs two instruction memories. How does the bootloader reach both, or can they act as one 128-word memory?** They can act as one: widen the address to 7 bits and use bit 6 to pick the macro (`men` goes to one or the other, and `dout` is selected by a registered copy of bit 6). Bursts then cross from one macro into the other. A separate opcode per memory also works. The IHP library has no 128x16 macro; the next size is 256x16. The choice is a design decision and should be recorded in the research repository.
+- **Should an invalid address be tested?** Every 7-bit address is valid, and the upper 9 bits of the address word are ignored. P9 checks that they are ignored.
+- **The design needs two instruction memories. How does the bootloader reach both?** Through `imem_port`, which joins them into one 128-word memory: the address is 7 bits wide and bit 6 selects the macro. `men` goes to one macro or the other, and `dout` is selected by a copy of bit 6 that is registered on each read, so it matches the one-cycle read latency and holds through writes and idle cycles. Bursts cross from one macro into the other (T6). The IHP library has no 128x16 macro; the next size is 256x16. The decision should still be recorded in the research repository.
 
 ## Assumptions and open items
 

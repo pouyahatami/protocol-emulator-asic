@@ -7,17 +7,18 @@
 `default_nettype none
 
 // Self-checking testbench for bootloader. The testbench plays the SPI slave, and the bootloader
-// drives the IHP 64x16 SRAM model from the PDK
+// drives the two IHP 64x16 SRAM models from the PDK through imem_port, as in the top level
 module bootloader_tb;
 
   // 50MHz clk
   localparam int          CLK_PERIOD_NS        = 20;
 
-  // RM_IHPSG13_1P_64x16_c2: the IHP SG13G2 single-port SRAM with
-  // 64 words of 16 bits. Reads have one clock cycle of latency
-  localparam int          ADDR_WIDTH           = 6;
+  // Two RM_IHPSG13_1P_64x16_c2 macros joined by imem_port: 128 words of 16 bits. Reads have one
+  // clock cycle of latency
+  localparam int          ADDR_WIDTH           = 7;
 
   localparam int          DEPTH                = 1 << ADDR_WIDTH;
+  localparam int          BANK_DEPTH           = DEPTH / 2;
 
   localparam logic [15:0] OPCODE_WRITE         = 16'h0002;
   localparam logic [15:0] OPCODE_READ          = 16'h0003;
@@ -34,13 +35,23 @@ module bootloader_tb;
   logic [15:0] tx_word;
   logic        tx_load;
 
-  // SRAM macro interface
+  // Bootloader memory interface, the access port of imem_port
   logic                  sram_men;
   logic                  sram_wen;
   logic                  sram_ren;
   logic [ADDR_WIDTH-1:0] sram_addr;
   logic [15:0]           sram_din;
   logic [15:0]           sram_dout;
+
+  // Macro side of imem_port
+  logic                  mem0_men;
+  logic                  mem1_men;
+  logic                  mem_wen;
+  logic                  mem_ren;
+  logic [5:0]            mem_addr;
+  logic [15:0]           mem_din;
+  logic [15:0]           mem0_dout;
+  logic [15:0]           mem1_dout;
 
   bootloader #(
       .ADDR_WIDTH(ADDR_WIDTH)
@@ -60,16 +71,46 @@ module bootloader_tb;
       .sram_dout  (sram_dout)
   );
 
+  imem_port imem_port_instance (
+      .clk      (clk),
+      .rst_n    (rst_n),
+      .men      (sram_men),
+      .wen      (sram_wen),
+      .ren      (sram_ren),
+      .addr     (sram_addr),
+      .din      (sram_din),
+      .dout     (sram_dout),
+      .mem0_men (mem0_men),
+      .mem1_men (mem1_men),
+      .mem_wen  (mem_wen),
+      .mem_ren  (mem_ren),
+      .mem_addr (mem_addr),
+      .mem_din  (mem_din),
+      .mem0_dout(mem0_dout),
+      .mem1_dout(mem1_dout)
+  );
+
   // A_DLY must be tied high per the datasheet; the PDK model stops the simulation otherwise
-  RM_IHPSG13_1P_64x16_c2 sram_instance (
+  RM_IHPSG13_1P_64x16_c2 imem0_instance (
       .A_CLK (clk),
-      .A_MEN (sram_men),
-      .A_WEN (sram_wen),
-      .A_REN (sram_ren),
-      .A_ADDR(sram_addr),
-      .A_DIN (sram_din),
+      .A_MEN (mem0_men),
+      .A_WEN (mem_wen),
+      .A_REN (mem_ren),
+      .A_ADDR(mem_addr),
+      .A_DIN (mem_din),
       .A_DLY (1'b1),
-      .A_DOUT(sram_dout)
+      .A_DOUT(mem0_dout)
+  );
+
+  RM_IHPSG13_1P_64x16_c2 imem1_instance (
+      .A_CLK (clk),
+      .A_MEN (mem1_men),
+      .A_WEN (mem_wen),
+      .A_REN (mem_ren),
+      .A_ADDR(mem_addr),
+      .A_DIN (mem_din),
+      .A_DLY (1'b1),
+      .A_DOUT(mem1_dout)
   );
 
   // CLK generation
@@ -220,6 +261,17 @@ module bootloader_tb;
     read_burst(0, 2);
   endtask
 
+  // Checks that a burst runs from the last word of the first macro into the second. The read
+  // burst prefetches across the boundary, so the output select must switch macros mid-burst
+  task automatic test_burst_crosses_macro_boundary();
+    $display("[%0t] test_burst_crosses_macro_boundary", $time);
+    reset();
+    write_burst(BANK_DEPTH - 2, {16'h0A3E, 16'h0A3F, 16'h1A40, 16'h1A41});
+    read_burst(BANK_DEPTH - 2, 4);
+    // The first macro's words must not have been overwritten by the second macro's
+    read_burst(BANK_DEPTH - 2, 2);
+  endtask
+
   // Checks that an unknown opcode sends the bootloader to IGNORE
   task automatic test_unknown_opcode_is_ignored();
     $display("[%0t] test_unknown_opcode_is_ignored", $time);
@@ -281,6 +333,7 @@ module bootloader_tb;
     test_write_then_read_burst();
     test_length_one_bursts();
     test_address_wraps_at_end_of_sram();
+    test_burst_crosses_macro_boundary();
     test_unknown_opcode_is_ignored();
     test_chip_select_ends_transfer();
 

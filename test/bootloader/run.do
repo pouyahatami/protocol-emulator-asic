@@ -8,6 +8,7 @@ vlib work
 # chat before keeping this suppression
 vlog -sv +define+FUNCTIONAL -suppress 2892 \
   ../../src/bootloader.sv \
+  ../../src/imem_port.sv \
   $SRAM_MODELS/RM_IHPSG13_1P_64x16_c2.v \
   $SRAM_MODELS/RM_IHPSG13_1P_core_behavioral.v \
   bootloader_tb.sv
