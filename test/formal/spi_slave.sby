@@ -1,0 +1,20 @@
+[tasks]
+bmc
+cover
+
+[options]
+bmc: mode bmc
+cover: mode cover
+depth 48
+
+[engines]
+smtbmc boolector
+
+[script]
+read_verilog -sv -formal sync_2ff.sv spi_slave.sv spi_slave_formal.sv
+prep -top spi_slave_formal
+
+[files]
+../../src/sync_2ff.sv
+../../src/spi_slave.sv
+spi_slave_formal.sv
