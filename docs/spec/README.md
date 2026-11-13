@@ -2,6 +2,10 @@
 
 This directory will contain accepted, implementation-facing specifications.
 
+Accepted documents:
+
+- [`control-fsm.md`](control-fsm.md) — one SM's ports, internal signals, and control FSM.
+
 Planned documents:
 
 - `architecture.md` — block boundaries, state, clocks, and reset behavior.
