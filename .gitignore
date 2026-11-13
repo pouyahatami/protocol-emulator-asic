@@ -11,3 +11,9 @@ test/sim_build
 test/__pycache__/
 test/results.xml
 test/gate_level_netlist.v
+test/bootloader/work/
+test/bootloader/transcript
+test/bootloader/*.wlf
+test/imem_port/work/
+test/imem_port/transcript
+test/imem_port/*.wlf

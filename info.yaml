@@ -18,39 +18,40 @@ project:
   # Don't forget to also update `PROJECT_SOURCES` in test/Makefile.
   source_files:
     - "project.v"
+    - "sram_64x16_bb.sv"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
 # This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).
 pinout:
   # Inputs
-  ui[0]: "stage0_operand_a[0]"
-  ui[1]: "stage0_operand_a[1]"
-  ui[2]: "stage0_operand_a[2]"
-  ui[3]: "stage0_operand_a[3]"
-  ui[4]: "stage0_operand_a[4]"
-  ui[5]: "stage0_operand_a[5]"
-  ui[6]: "stage0_operand_a[6]"
-  ui[7]: "stage0_operand_a[7]"
+  ui[0]: "imem_addr[0]"
+  ui[1]: "imem_addr[1]"
+  ui[2]: "imem_addr[2]"
+  ui[3]: "imem_addr[3]"
+  ui[4]: "imem_addr[4]"
+  ui[5]: "imem_addr[5]"
+  ui[6]: "imem_select"
+  ui[7]: "imem_write"
 
   # Outputs
-  uo[0]: "stage0_digest[0]"
-  uo[1]: "stage0_digest[1]"
-  uo[2]: "stage0_digest[2]"
-  uo[3]: "stage0_digest[3]"
-  uo[4]: "stage0_digest[4]"
-  uo[5]: "stage0_digest[5]"
-  uo[6]: "stage0_digest[6]"
-  uo[7]: "stage0_digest[7]"
+  uo[0]: "imem_read_byte[0]"
+  uo[1]: "imem_read_byte[1]"
+  uo[2]: "imem_read_byte[2]"
+  uo[3]: "imem_read_byte[3]"
+  uo[4]: "imem_read_byte[4]"
+  uo[5]: "imem_read_byte[5]"
+  uo[6]: "imem_read_byte[6]"
+  uo[7]: "imem_read_byte[7]"
 
   # Bidirectional pins
-  uio[0]: "stage0_operand_b[0] (input only)"
-  uio[1]: "stage0_operand_b[1] (input only)"
-  uio[2]: "stage0_operand_b[2] (input only)"
-  uio[3]: "stage0_operand_b[3] (input only)"
-  uio[4]: "stage0_operand_b[4] (input only)"
-  uio[5]: "stage0_operand_b[5] (input only)"
-  uio[6]: "stage0_operand_b[6] (input only)"
-  uio[7]: "stage0_operand_b[7] (input only)"
+  uio[0]: "imem_write_data[0] / read byte select (input only)"
+  uio[1]: "imem_write_data[1] (input only)"
+  uio[2]: "imem_write_data[2] (input only)"
+  uio[3]: "imem_write_data[3] (input only)"
+  uio[4]: "imem_write_data[4] (input only)"
+  uio[5]: "imem_write_data[5] (input only)"
+  uio[6]: "imem_write_data[6] (input only)"
+  uio[7]: "imem_write_data[7] (input only)"
 
 # Do not change!
 yaml_version: 6
