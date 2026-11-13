@@ -15,6 +15,8 @@ module pio_sm_ctrl (
     input  logic       enable,
     input  logic       tick,
     input  logic       stall,
+    // 1 when the instruction at PC is outside the v0 subset. Holds PC with no strobes
+    input  logic       unsup_instr,
     input  logic [4:0] delay_val,
     input  logic       delay_last,
 
@@ -24,9 +26,12 @@ module pio_sm_ctrl (
     output logic       delay_load,
     output logic       delay_dec,
     output logic       stalled,
-    output logic       active
+    output logic       active,
+    // 1 in EXEC or STALL, so the wrapper can latch unsupported while this instruction is current
+    output logic       on_instr
 );
 
+  // The encodings are fixed because the spec and the testbenches read the raw state
   typedef enum logic [1:0] {
     Disabled = 2'b00,
     Exec     = 2'b01,
@@ -58,33 +63,44 @@ module pio_sm_ctrl (
 
     if (!enable) begin
       state_next = Disabled;
-    end else if (state == Disabled) begin
-      state_next = Exec;
-    end else if (tick) begin
+    end else begin
       case (state)
-    
+        Disabled: begin
+          state_next = Exec;
+        end
         Exec, Stall: begin
-          // Side-set applies on every tick of the instruction, including stalled ones
-          sideset_en = 1'b1;
-          if (stall) begin
-            state_next = Stall;
-          end else begin
-            commit     = 1'b1;
-            pc_advance = 1'b1;
-            if (delay_val == 5'd0) begin
+          if (tick) begin
+            if (unsup_instr) begin
+              // Hold like a stall, but do not side-set or enter STALL. The sticky flag is outside
               state_next = Exec;
             end else begin
-              delay_load = 1'b1;
-              state_next = Delay;
+              // Side-set applies on every tick of the instruction, including stalled ones
+              sideset_en = 1'b1;
+              if (stall) begin
+                state_next = Stall;
+              end else begin
+                commit     = 1'b1;
+                pc_advance = 1'b1;
+                if (delay_val == 5'd0) begin
+                  state_next = Exec;
+                end else begin
+                  delay_load = 1'b1;
+                  state_next = Delay;
+                end
+              end
             end
           end
         end
         Delay: begin
-          delay_dec = 1'b1;
-          if (delay_last) begin
-            state_next = Exec;
+          if (tick) begin
+            delay_dec = 1'b1;
+            if (delay_last) begin
+              state_next = Exec;
+            end
           end
         end
+        // Unreachable while all four encodings are states. Kept so an X state in simulation, or
+        // a future fifth state, falls back to DISABLED
         default: begin
           state_next = Disabled;
         end
@@ -92,8 +108,9 @@ module pio_sm_ctrl (
     end
   end
 
-  assign stalled = (state == Stall);
-  assign active  = (state != Disabled);
+  assign stalled  = (state == Stall);
+  assign active   = (state != Disabled);
+  assign on_instr = (state == Exec) || (state == Stall);
 
 endmodule
 

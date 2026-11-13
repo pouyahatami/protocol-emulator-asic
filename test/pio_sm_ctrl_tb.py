@@ -19,7 +19,7 @@ NONE = frozenset()
 EXECUTE = frozenset({"commit", "pc_advance", "sideset_en"})
 
 
-def reference(state, enable, tick, stall, delay_val, delay_last):
+def reference(state, enable, tick, stall, delay_val, delay_last, unsup_instr=0):
     """Return (next state, asserted strobes) from the spec's transition table."""
     if not enable:
         return DISABLED, NONE
@@ -28,6 +28,8 @@ def reference(state, enable, tick, stall, delay_val, delay_last):
     if not tick:
         return state, NONE
     if state in (EXEC, STALL):
+        if unsup_instr:
+            return EXEC, NONE
         if stall:
             return STALL, frozenset({"sideset_en"})
         if delay_val == 0:
@@ -43,6 +45,7 @@ async def start(dut):
     dut.enable.value = 0
     dut.tick.value = 0
     dut.stall.value = 0
+    dut.unsup_instr.value = 0
     dut.delay_val.value = 0
     dut.delay_last.value = 0
     await ClockCycles(dut.clk, 2)
@@ -50,7 +53,7 @@ async def start(dut):
     dut.rst_n.value = 1
 
 
-async def step(dut, enable=1, tick=0, stall=0, delay_val=0, delay_last=0):
+async def step(dut, enable=1, tick=0, stall=0, delay_val=0, delay_last=0, unsup_instr=0):
     """Drive one cycle's inputs away from the clock edge and sample the Mealy outputs.
 
     Returns the state during this cycle and the set of asserted strobes. The following call
@@ -60,6 +63,7 @@ async def step(dut, enable=1, tick=0, stall=0, delay_val=0, delay_last=0):
     dut.enable.value = enable
     dut.tick.value = tick
     dut.stall.value = stall
+    dut.unsup_instr.value = unsup_instr
     dut.delay_val.value = delay_val
     dut.delay_last.value = delay_last
     await ReadOnly()
@@ -67,6 +71,7 @@ async def step(dut, enable=1, tick=0, stall=0, delay_val=0, delay_last=0):
     strobes = frozenset(name for name in STROBES if int(getattr(dut, name).value))
     assert int(dut.stalled.value) == (state == STALL), "stalled must equal state == STALL"
     assert int(dut.active.value) == (state != DISABLED), "active must equal state != DISABLED"
+    assert int(dut.on_instr.value) == (state in (EXEC, STALL)), "on_instr must equal EXEC or STALL"
     return state, strobes
 
 
@@ -178,6 +183,28 @@ async def test_disable_from_every_state(dut):
 
 
 @cocotb.test()
+async def test_unsupported_holds_in_exec(dut):
+    """An illegal instruction stays in EXEC with no strobes, even if stall is also high."""
+    await start(dut)
+    await enter_exec(dut)
+    await expect(dut, EXEC, NONE, tick=1, stall=1, delay_val=7, unsup_instr=1)
+    await expect(dut, EXEC, NONE, tick=1, stall=0, delay_val=0, unsup_instr=1)
+    await expect(dut, EXEC, NONE, tick=0, unsup_instr=1)
+    await expect(dut, EXEC, EXECUTE, tick=1, unsup_instr=0)
+
+
+@cocotb.test()
+async def test_delay_ignores_unsupported(dut):
+    """DELAY still counts down if the next instruction, already in the PC, is illegal."""
+    await start(dut)
+    await enter_exec(dut)
+    await expect(dut, EXEC, EXECUTE | {"delay_load"}, tick=1, delay_val=2)
+    await expect(dut, DELAY, {"delay_dec"}, tick=1, unsup_instr=1)
+    await expect(dut, DELAY, {"delay_dec"}, tick=1, delay_last=1, unsup_instr=1)
+    await expect(dut, EXEC, NONE, unsup_instr=1)
+
+
+@cocotb.test()
 async def test_random_against_reference(dut):
     """Constrained-random inputs must match the transition table on every cycle."""
     rng = random.Random(0x5EED)
@@ -191,6 +218,7 @@ async def test_random_against_reference(dut):
             "stall": int(rng.random() < 0.3),
             "delay_val": 0 if rng.random() < 0.5 else rng.randrange(1, 32),
             "delay_last": int(rng.random() < 0.3),
+            "unsup_instr": int(rng.random() < 0.15),
         }
         want_next, want_strobes = reference(state, **inputs)
         got_state, got_strobes = await step(dut, **inputs)

@@ -39,12 +39,12 @@ class TxFifo:
         self.q.append(byte & 0xFF)
 
 
-async def drive_imem(dut):
+async def drive_imem(dut, program):
     """Return the instruction at PC in the same cycle, as a flop memory would."""
     while True:
         await FallingEdge(dut.clk)
         addr = int(dut.imem_addr.value)
-        dut.imem_data.value = UART_TX.get(addr, 0)
+        dut.imem_data.value = program.get(addr, 0)
 
 
 async def drive_fifo(dut, fifo):
@@ -64,8 +64,10 @@ async def drive_fifo(dut, fifo):
             fifo.q.pop(0)
 
 
-async def start(dut, clkdiv=1):
+async def start(dut, clkdiv=1, program=None):
     """Reset, apply the UART TX configuration, and start the memory and FIFO drivers."""
+    if program is None:
+        program = dict(UART_TX)
     fifo = TxFifo()
     cocotb.start_soon(Clock(dut.clk, CLOCK_PERIOD_NS, unit="ns").start())
     dut.rst_n.value = 0
@@ -79,14 +81,14 @@ async def start(dut, clkdiv=1):
     dut.out_base.value = TX_PIN
     dut.out_count.value = 1
     dut.shift_right.value = 1
-    dut.imem_data.value = UART_TX[0]
+    dut.imem_data.value = program.get(0, 0)
     dut.txf_data.value = 0
     dut.txf_empty.value = 1
     dut.pins_in.value = 0
     await ClockCycles(dut.clk, 2)
     await FallingEdge(dut.clk)
     dut.rst_n.value = 1
-    cocotb.start_soon(drive_imem(dut))
+    cocotb.start_soon(drive_imem(dut, program))
     cocotb.start_soon(drive_fifo(dut, fifo))
     return fifo
 
@@ -148,6 +150,7 @@ async def test_reset_idle_high(dut):
     assert int(dut.pc.value) == 0
     assert int(dut.stalled.value) == 0
     assert int(dut.pins_oe.value) == 0
+    assert int(dut.unsupported.value) == 0
 
 
 @cocotb.test()
@@ -178,6 +181,7 @@ async def test_one_byte_0x55_trace(dut):
             f"tick {tick}: state/pc {(state, pc)}, expected {(want_state, want_pc)}"
         )
         assert await after_tick(dut) == want_tx, f"tick {tick}: TX {tx_bit(dut)}, expected {want_tx}"
+        assert int(dut.unsupported.value) == 0
 
     state, pc, stalled = await next_tick(dut)
     assert (state, pc, stalled) == (STALL, 0, 1)
@@ -278,3 +282,74 @@ async def test_disable_holds_and_drops_delay(dut):
     state, pc, _ = await next_tick(dut)
     assert (state, pc) == (EXEC, 2), "re-enable must execute the instruction left in the PC"
     assert await after_tick(dut) == 1, "first data bit of 0x55, with the rest of the start bit dropped"
+
+
+# WAIT, MOV, PUSH, SET PINS. None of these is in the v0 subset
+ILLEGAL = {
+    "wait": 0x2000,
+    "mov": 0xA000,
+    "push": 0x8020,
+    "set_pins": 0xE001,
+    "jmp_not_x": 0x0020,
+    # pioasm encodes out pins, 32 as a count of 0. Neither count may shift or drive the pins
+    "out_pins_0": 0x6000,
+    "out_pins_9": 0x6009,
+}
+
+
+@cocotb.test()
+async def test_illegal_opcode_holds_pc_and_pins(dut):
+    """WAIT at address 0 never commits: PC stays 0, TX stays high, stalled stays 0."""
+    await start(dut, clkdiv=1, program={0: ILLEGAL["wait"]})
+    await enable(dut)
+    for _ in range(4):
+        state, pc, stalled = await next_tick(dut)
+        assert (state, pc, stalled) == (EXEC, 0, 0)
+        assert await after_tick(dut) == 1
+        assert int(dut.txf_pop.value) == 0
+    assert int(dut.unsupported.value) == 1
+
+
+@cocotb.test()
+async def test_illegal_encodings_set_sticky_flag(dut):
+    """PUSH, SET PINS, MOV, WAIT, JMP !X, and OUT counts of 0 or 9 freeze and set the flag."""
+    program = {0: 0}
+    await start(dut, clkdiv=1, program=program)
+    for name, word in ILLEGAL.items():
+        program[0] = word
+        await FallingEdge(dut.clk)
+        dut.enable.value = 0
+        dut.rst_n.value = 0
+        await ClockCycles(dut.clk, 2)
+        await FallingEdge(dut.clk)
+        dut.rst_n.value = 1
+        await enable(dut)
+        _, pc, stalled = await next_tick(dut)
+        assert (pc, stalled) == (0, 0), name
+        assert await after_tick(dut) == 1, name
+        assert int(dut.unsupported.value) == 1, name
+
+
+@cocotb.test()
+async def test_unsupported_sticky_until_reset(dut):
+    """Disable does not clear unsupported. Reset does."""
+    await start(dut, clkdiv=1, program={0: ILLEGAL["mov"]})
+    await enable(dut)
+    await next_tick(dut)
+    await after_tick(dut)
+    assert int(dut.unsupported.value) == 1
+
+    await disable(dut)
+    await ClockCycles(dut.clk, 3)
+    await FallingEdge(dut.clk)
+    await ReadOnly()
+    assert int(dut.unsupported.value) == 1
+    assert int(dut.pc.value) == 0
+
+    await FallingEdge(dut.clk)
+    dut.rst_n.value = 0
+    await ClockCycles(dut.clk, 2)
+    await FallingEdge(dut.clk)
+    await ReadOnly()
+    assert int(dut.unsupported.value) == 0
+    assert int(dut.pc.value) == 0

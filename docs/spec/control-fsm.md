@@ -15,6 +15,8 @@
   [`src/pio/pio_sm_osr.sv`](../../src/pio/pio_sm_osr.sv) the OSR,
   [`src/pio/pio_sm_pins.sv`](../../src/pio/pio_sm_pins.sv) the pin outputs, and
   [`src/pio/pio_sm.sv`](../../src/pio/pio_sm.sv) the SM wrapper.
+  [`src/pio/pio_pkg.sv`](../../src/pio/pio_pkg.sv) holds the opcode and field encodings they
+  share.
 
 Raspberry Pi does not publish PIO's internal FSM. This design reconstructs the behavior the
 datasheet describes: one instruction per tick, stalls, delays, side-set, and wrap.
@@ -92,6 +94,7 @@ All static while `enable = 1`.
 | `pins_oe` | out | 24 | Registered | 1 = this SM drives the pin. Reset: all 0. Only matters on the 8 bidirectional pins. |
 | `stalled` | out | 1 | From state register | 1 while the FSM is in STALL. |
 | `pc` | out | 5 | Registered | Current PC, for the host and tests. Same as `imem_addr`. |
+| `unsupported` | out | 1 | Sticky register | 1 after EXEC or STALL sees a v0-illegal instruction. Clears only on reset. |
 
 The pin buses cover all 24 Tiny Tapeout pins. The top-level pin mux decides which SM drives
 each pin. RX ports (`rxf_data`, `rxf_push`, `rxf_full`) come with UART RX.
@@ -109,11 +112,17 @@ each pin. RX ports (`rxf_data`, `rxf_push`, `rxf_full`) come with UART RX.
 on the first clock in EXEC. The first tick therefore falls on the `max(clkdiv, 1)`-th clock
 in EXEC, for every value of `clkdiv`.
 
-**Decoder.** Combinational from `imem_data`.
+**Decoder.** Combinational from `imem_data`. `op`, `ds_field`, and `args` stay inside the
+decoder. Every other module sees an instruction only through its `is_*` flag and the
+argument fields, and at most one flag is 1.
 
 | Signal | Width | Bits | Meaning |
 |---|---|---|---|
 | `op` | 3 | `[15:13]` | Opcode: `000` JMP, `011` OUT, `100` PUSH/PULL, `111` SET. |
+| `is_jmp` | 1 | `op == 000` | Instruction is `JMP`. |
+| `is_out` | 1 | `op == 011` | Instruction is `OUT`. |
+| `is_pull` | 1 | `op == 100 && args[7]` | Instruction is `PULL`. |
+| `is_set` | 1 | `op == 111` | Instruction is `SET`. |
 | `ds_field` | 5 | `[12:8]` | Delay/side-set field. |
 | `args` | 8 | `[7:0]` | Opcode-specific arguments. |
 | `side_en` | 1 | From `ds_field` | This instruction drives side-set. `ds_field[4]` if `sideset_opt`, else `sideset_count > 0`. |
@@ -124,9 +133,9 @@ in EXEC, for every value of `clkdiv`.
 | `set_dest` | 3 | `args[7:5]` | `001` X, `010` Y, `000` pins. |
 | `set_data` | 5 | `args[4:0]` | Immediate value. |
 | `out_dest` | 3 | `args[7:5]` | `000` pins. |
-| `out_bits` | 5 | `args[4:0]` | Bits to shift out, 1–8. Larger values are undecided. |
-| `is_pull` | 1 | `op == 100 && args[7]` | Instruction is `PULL`. |
-| `block` | 1 | `args[5]` | Blocking `PULL`. Non-blocking is not in v0. |
+| `out_bits` | 5 | `args[4:0]` | Bits to shift out, 1–8. 0 and values above 8 are unsupported in v0. On RP2040, 0 encodes the full width; that meaning is deferred to the OSR-width parameter. |
+| `block` | 1 | `op == 100 && args[5]` | Blocking `PUSH` or `PULL`. 0 for every other opcode. Non-blocking is not in v0. |
+| `unsup_instr` | 1 | All fields | 1 when the instruction is outside the v0 subset in the table below. |
 
 With UART TX settings (`sideset_opt = 1`, `sideset_count = 1`): `ds_field[4]` is `side_en`,
 `ds_field[3]` is `side_val`, and `ds_field[2:0]` is `delay_val`.
@@ -139,8 +148,24 @@ With UART TX settings (`sideset_opt = 1`, `sideset_count = 1`): `ds_field[4]` is
 | `delay_cnt` | 5 | Register | Delay ticks left. Reset 0. |
 | `delay_last` | 1 | Combinational | `delay_cnt == 1`. |
 | `pc` | 5 | Register | Reset 0. ← `next_pc` when `pc_advance = 1`, else holds. |
-| `jump_taken` | 1 | Combinational | `op == JMP` and the condition holds, tested on X before decrementing. |
+| `jump_taken` | 1 | Combinational | `is_jmp` and the condition holds, tested on X before decrementing. |
 | `next_pc` | 5 | Combinational | `jmp_addr` if `jump_taken`. Else `wrap_bottom` if `pc == wrap_top`. Else `pc + 1`. |
+
+**Unsupported instructions (v0).** Anything not in this list is `unsup_instr`:
+
+| Instruction | Legal when |
+|---|---|
+| JMP | `jmp_cond` is always (`000`) or X-- (`010`) |
+| OUT | dest is pins (`000`) and `out_bits` is 1–8 |
+| PULL | `args == 1010_0000`: blocking, IfEmpty (`args[6]`) clear, reserved `args[4:0]` zero |
+| SET | dest is X (`001`) or Y (`010`) |
+
+WAIT, IN, MOV, IRQ, PUSH, non-blocking PULL, PULL IfEmpty, PULL with reserved bits set, SET PINS,
+other JMP conditions, and OUT bit counts outside 1–8 are illegal in v0. The decoder computes
+`unsup_instr`. The FSM holds PC in EXEC with no strobes, so side-set does not
+apply. `unsupported` sets on the next clock while `enable && on_instr && unsup_instr`, even
+before the first tick, and stays 1 until reset. Disable does not clear it. A host write-1-to-clear
+is not defined yet.
 
 **Datapath registers.** Written only when `commit = 1`, except side-set.
 
@@ -195,6 +220,7 @@ flag.
 | `enable` | 1 | Host control register | Level | 1 = run. 0 forces DISABLED on the next clock, from any state. |
 | `tick` | 1 | Clock divider | Combinational, one-cycle pulse | The SM may take one step this cycle. |
 | `stall` | 1 | Stall check | Combinational | The instruction at PC can't complete this tick. Only read in EXEC and STALL. |
+| `unsup_instr` | 1 | Legality check | Combinational | The instruction at PC is not in the v0 subset. Only read in EXEC and STALL, and before `stall`. |
 | `delay_val` | 5 | Decoder | Combinational | Delay ticks to add after this instruction. 0 = none. Only read in EXEC and STALL. |
 | `delay_last` | 1 | Delay counter | Combinational | This is the last delay tick. Only read in DELAY. |
 
@@ -205,9 +231,9 @@ Terms added to `stall` later:
 
 | Term | Needed by |
 |---|---|
-| `op == WAIT && !wait_cond` | UART RX |
-| `op == PUSH && block && rxf_full` | UART RX |
-| `op == OUT && autopull && osr_empty && txf_empty` | Autopull, if adopted |
+| `is_wait && !wait_cond` | UART RX |
+| `is_push && block && rxf_full` | UART RX |
+| `is_out && autopull && osr_empty && txf_empty` | Autopull, if adopted |
 
 ### Outputs
 
@@ -223,6 +249,7 @@ The five strobes are combinational, last one cycle, and are 0 unless `tick = 1`.
 | `delay_dec` | 1 | Delay counter | `delay_cnt` ← `delay_cnt − 1`. |
 | `stalled` | 1 | Port `stalled` | `state == STALL`. |
 | `active` | 1 | Clock divider | `state != DISABLED`. Gates the divider, so no tick is generated in DISABLED. |
+| `on_instr` | 1 | Sticky `unsupported` | `state == EXEC \|\| state == STALL`. |
 
 ### Transitions
 
@@ -233,6 +260,7 @@ Rows are in priority order. The first match wins.
 | any | `!enable` | DISABLED | none |
 | DISABLED | `enable` | EXEC | none |
 | any | `!tick` | same | none |
+| EXEC or STALL | `unsup_instr` | EXEC | none |
 | EXEC or STALL | `stall` | STALL | `sideset_en` |
 | EXEC or STALL | `!stall && delay_val == 0` | EXEC | `commit`, `pc_advance`, `sideset_en` |
 | EXEC or STALL | `!stall && delay_val > 0` | DELAY | `commit`, `pc_advance`, `sideset_en`, `delay_load` |
@@ -254,3 +282,5 @@ These all affect the golden trace.
    clock in EXEC, and the first instruction executes on the `max(clkdiv, 1)`-th clock in EXEC.
 5. **All `pins_out` reset to 1.** Simplest choice that keeps UART idle high. SPI and I2C programs
    set their own levels on the first tick.
+6. **An illegal instruction freezes in EXEC, not STALL.** `stalled` stays 0 so a FIFO wait is
+   distinct from bad firmware. Side-set does not apply. `unsupported` is sticky until reset.

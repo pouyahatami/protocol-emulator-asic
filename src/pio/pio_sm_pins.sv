@@ -15,7 +15,7 @@ module pio_sm_pins (
     input  logic        rst_n,
 
     input  logic        commit,
-    input  logic [2:0]  op,
+    input  logic        is_out,
     input  logic [2:0]  out_dest,
     // Zero above out_bits, so OUT pins beyond out_bits are driven to 0
     input  logic [7:0]  out_data,
@@ -34,9 +34,9 @@ module pio_sm_pins (
     output logic [23:0] pins_oe
 );
 
-  localparam int          NumPins     = 24;
-  localparam logic [2:0]  OpOut       = 3'b011;
-  localparam logic [2:0]  OutDestPins = 3'b000;
+  import pio_pkg::*;
+
+  localparam int NumPins = 24;
 
   logic        do_out;
   logic        do_side;
@@ -44,7 +44,7 @@ module pio_sm_pins (
   logic [4:0]  side_off;
   logic [23:0] pins_next;
 
-  assign do_out  = commit && (op == OpOut) && (out_dest == OutDestPins);
+  assign do_out  = commit && is_out && (out_dest == OutDestPins);
   assign do_side = sideset_en && side_en;
 
   // Pin j is OUT bit (j - out_base) mod 32 and side-set bit (j - sideset_base) mod 32, when
