@@ -67,9 +67,13 @@ All static while `enable = 1`.
 | `imem_addr` | out | 5 | Registered (= PC) | Address of the current instruction. |
 | `imem_data` | in | 16 | Combinational | Instruction at `imem_addr`, valid in the same cycle. |
 
-The same-cycle read assumes a flop or latch memory. A synchronous SRAM, as in
-[ASIC PR #1](https://github.com/pouyahatami/protocol-emulator-asic/pull/1), returns data one
-cycle later and needs a fetch stage this FSM does not have yet.
+> **Open issue: fetch with synchronous SRAM.** This interface assumes `imem_data` is valid in
+> the same cycle as `imem_addr`. The SRAM in
+> [ASIC PR #1](https://github.com/pouyahatami/protocol-emulator-asic/pull/1) returns data one
+> clock later. At `clkdiv >= 2` this is harmless, because the new instruction is valid before
+> the next tick. At `clkdiv <= 1`, each tick would execute the previous instruction. Options,
+> undecided: (1) address the SRAM with `pc_advance ? next_pc : pc`, which adds no latency but
+> must meet 20 ns from SRAM clock-to-Q to address setup; (2) require `clkdiv >= 2`.
 
 ### Ports: TX FIFO
 
