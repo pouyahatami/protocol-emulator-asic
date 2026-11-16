@@ -14,9 +14,9 @@ module pio_sm_osr (
     input  logic       rst_n,
 
     input  logic       commit,
-    input  logic [2:0] op,
+    input  logic       is_out,
     input  logic       is_pull,
-    // 1 to 8. Larger values are undefined and currently act as 8
+    // 1 to 8. The wrapper never commits 0 or values above 8, which are unsupported in v0
     input  logic [4:0] out_bits,
     // Must not change while the SM is enabled
     input  logic       shift_right,
@@ -27,21 +27,20 @@ module pio_sm_osr (
     output logic [7:0] out_data
 );
 
-  localparam logic [2:0] OpOut = 3'b011;
-
   logic       do_pull;
   logic       do_out;
-  logic [3:0] shift_n;
+  logic [3:0] shift_count;
   logic [4:0] count_sum;
 
   assign do_pull = commit && is_pull;
-  assign do_out  = commit && (op == OpOut);
+  assign do_out  = commit && is_out;
 
-  assign shift_n   = (out_bits > 5'd8) ? 4'd8 : out_bits[3:0];
-  assign count_sum = {1'b0, osr_count} + {1'b0, shift_n};
+  assign shift_count = (out_bits > 5'd8) ? 4'd8 : out_bits[3:0];
+  assign count_sum   = {1'b0, osr_count} + {1'b0, shift_count};
 
-  // A right shift sends the low shift_n bits, and a left shift sends the high shift_n bits
-  assign out_data = shift_right ? (osr & ~(8'hFF << shift_n)) : (osr >> (4'd8 - shift_n));
+  // A right shift sends the low shift_count bits, and a left shift sends the high ones
+  assign out_data = shift_right ? (osr & ~(8'hFF << shift_count))
+                                : (osr >> (4'd8 - shift_count));
 
   always_ff @(posedge clk) begin
     if (!rst_n) begin
@@ -51,7 +50,7 @@ module pio_sm_osr (
       osr       <= txf_data;
       osr_count <= 4'd0;
     end else if (do_out) begin
-      osr       <= shift_right ? (osr >> shift_n) : (osr << shift_n);
+      osr       <= shift_right ? (osr >> shift_count) : (osr << shift_count);
       osr_count <= (count_sum > 5'd8) ? 4'd8 : count_sum[3:0];
     end
   end

@@ -14,7 +14,8 @@ module pio_sm_scratch (
     input  logic       rst_n,
 
     input  logic       commit,
-    input  logic [2:0] op,
+    input  logic       is_jmp,
+    input  logic       is_set,
     input  logic [2:0] set_dest,
     input  logic [4:0] set_data,
     input  logic [2:0] jmp_cond,
@@ -23,19 +24,15 @@ module pio_sm_scratch (
     output logic [7:0] y
 );
 
-  localparam logic [2:0] OpJmp       = 3'b000;
-  localparam logic [2:0] OpSet       = 3'b111;
-  localparam logic [2:0] SetDestX    = 3'b001;
-  localparam logic [2:0] SetDestY    = 3'b010;
-  localparam logic [2:0] JmpCondXDec = 3'b010;
+  import pio_pkg::*;
 
   logic set_x;
   logic set_y;
   logic dec_x;
 
-  assign set_x = commit && (op == OpSet) && (set_dest == SetDestX);
-  assign set_y = commit && (op == OpSet) && (set_dest == SetDestY);
-  assign dec_x = commit && (op == OpJmp) && (jmp_cond == JmpCondXDec);
+  assign set_x = commit && is_set && (set_dest == SetDestX);
+  assign set_y = commit && is_set && (set_dest == SetDestY);
+  assign dec_x = commit && is_jmp && (jmp_cond == JmpXDec);
 
   // The jump condition reads x before this edge, so the decrement never affects its own jump
   always_ff @(posedge clk) begin

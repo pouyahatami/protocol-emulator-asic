@@ -11,21 +11,19 @@ from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly
 
 CLOCK_PERIOD_NS = 20
 
-OP_JMP, OP_OUT, OP_PUSH_PULL, OP_SET = 0b000, 0b011, 0b100, 0b111
-
 
 def shifted_out(osr, n, shift_right):
     """The n bits an OUT sends, right-aligned."""
     return osr & ((1 << n) - 1) if shift_right else osr >> (8 - n)
 
 
-def reference(osr, count, commit, op, is_pull, out_bits, shift_right, txf_data):
+def reference(osr, count, commit, is_out, is_pull, out_bits, shift_right, txf_data):
     """Return (osr, osr_count) after one clock edge."""
     if not commit:
         return osr, count
     if is_pull:
         return txf_data, 0
-    if op == OP_OUT:
+    if is_out:
         new = osr >> out_bits if shift_right else (osr << out_bits) & 0xFF
         return new, min(count + out_bits, 8)
     return osr, count
@@ -43,7 +41,7 @@ async def reset(dut, shift_right):
     dut.rst_n.value = 0
     dut.shift_right.value = shift_right
     dut.commit.value = 0
-    dut.op.value = 0
+    dut.is_out.value = 0
     dut.is_pull.value = 0
     dut.out_bits.value = 0
     dut.txf_data.value = 0
@@ -52,14 +50,14 @@ async def reset(dut, shift_right):
     dut.rst_n.value = 1
 
 
-async def step(dut, commit=0, op=OP_JMP, is_pull=0, out_bits=0, txf_data=0):
+async def step(dut, commit=0, is_out=0, is_pull=0, out_bits=0, txf_data=0):
     """Drive one cycle's inputs away from the clock edge.
 
     Returns (osr, osr_count, out_data) during that cycle, before the edge applies the inputs.
     """
     await FallingEdge(dut.clk)
     dut.commit.value = commit
-    dut.op.value = op
+    dut.is_out.value = is_out
     dut.is_pull.value = is_pull
     dut.out_bits.value = out_bits
     dut.txf_data.value = txf_data
@@ -73,12 +71,12 @@ async def now(dut):
 
 
 async def pull(dut, value):
-    await step(dut, commit=1, op=OP_PUSH_PULL, is_pull=1, txf_data=value)
+    await step(dut, commit=1, is_pull=1, txf_data=value)
 
 
 async def out(dut, n):
     """Commit OUT n and return the bits it sent."""
-    _, _, out_data = await step(dut, commit=1, op=OP_OUT, out_bits=n)
+    _, _, out_data = await step(dut, commit=1, is_out=1, out_bits=n)
     return out_data
 
 
@@ -105,8 +103,8 @@ async def test_nothing_changes_without_commit(dut):
     """PULL and OUT are ignored on clocks without commit, as between ticks or while stalled."""
     await start(dut)
     await pull(dut, 0xA5)
-    await step(dut, commit=0, op=OP_PUSH_PULL, is_pull=1, txf_data=0x11)
-    await step(dut, commit=0, op=OP_OUT, out_bits=4)
+    await step(dut, commit=0, is_pull=1, txf_data=0x11)
+    await step(dut, commit=0, is_out=1, out_bits=4)
     assert await now(dut) == (0xA5, 0)
 
 
@@ -167,11 +165,10 @@ async def test_count_saturates_at_eight(dut):
 
 @cocotb.test()
 async def test_other_instructions_leave_osr(dut):
-    """JMP, SET, and PUSH never shift or load the OSR, even with out_bits and txf_data set."""
+    """A commit with neither flag, as for JMP, SET, or PUSH, never shifts or loads the OSR."""
     await start(dut)
     await pull(dut, 0x81)
-    for op in (OP_JMP, OP_SET, OP_PUSH_PULL):
-        await step(dut, commit=1, op=op, is_pull=0, out_bits=4, txf_data=0x42)
+    await step(dut, commit=1, is_out=0, is_pull=0, out_bits=4, txf_data=0x42)
     assert await now(dut) == (0x81, 0)
 
 
@@ -184,11 +181,12 @@ async def test_random_against_reference(dut):
         await reset(dut, shift_right)
         osr, count = 0, 0
         for cycle in range(5000):
-            op = rng.choice((OP_OUT, OP_OUT, OP_PUSH_PULL, OP_JMP, OP_SET))
+            # The decoder raises at most one flag, so the stimulus never raises both
+            kind = rng.choice(("out", "out", "pull", "other"))
             inputs = {
                 "commit": int(rng.random() < 0.6),
-                "op": op,
-                "is_pull": int(op == OP_PUSH_PULL and rng.random() < 0.8),
+                "is_out": int(kind == "out"),
+                "is_pull": int(kind == "pull"),
                 "out_bits": rng.randrange(1, 9),
                 "txf_data": rng.randrange(256),
             }

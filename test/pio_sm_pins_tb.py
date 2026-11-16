@@ -13,11 +13,10 @@ CLOCK_PERIOD_NS = 20
 
 NUM_PINS = 24
 ALL_HIGH = (1 << NUM_PINS) - 1
-OP_JMP, OP_OUT, OP_SET = 0b000, 0b011, 0b111
 DEST_PINS, DEST_X = 0b000, 0b001
 
 CONFIG = ("out_base", "out_count", "sideset_base", "sideset_count")
-STROBES = ("commit", "op", "out_dest", "out_data", "sideset_en", "side_en", "side_val")
+STROBES = ("commit", "is_out", "out_dest", "out_data", "sideset_en", "side_en", "side_val")
 
 
 def write_field(pins, base, count, data):
@@ -29,9 +28,9 @@ def write_field(pins, base, count, data):
     return pins
 
 
-def reference(pins, cfg, commit, op, out_dest, out_data, sideset_en, side_en, side_val):
+def reference(pins, cfg, commit, is_out, out_dest, out_data, sideset_en, side_en, side_val):
     """Return pins_out after one clock edge. Side-set is written last so it wins."""
-    if commit and op == OP_OUT and out_dest == DEST_PINS:
+    if commit and is_out and out_dest == DEST_PINS:
         pins = write_field(pins, cfg["out_base"], cfg["out_count"], out_data)
     if sideset_en and side_en:
         pins = write_field(pins, cfg["sideset_base"], cfg["sideset_count"], side_val)
@@ -59,12 +58,12 @@ async def reset(dut, out_base=0, out_count=1, sideset_base=0, sideset_count=1):
     dut.rst_n.value = 1
 
 
-async def step(dut, commit=0, op=OP_JMP, out_dest=DEST_PINS, out_data=0,
+async def step(dut, commit=0, is_out=0, out_dest=DEST_PINS, out_data=0,
                sideset_en=0, side_en=0, side_val=0):
     """Drive one cycle's inputs away from the clock edge and return pins_out during that cycle."""
     await FallingEdge(dut.clk)
     dut.commit.value = commit
-    dut.op.value = op
+    dut.is_out.value = is_out
     dut.out_dest.value = out_dest
     dut.out_data.value = out_data
     dut.sideset_en.value = sideset_en
@@ -80,11 +79,11 @@ async def now(dut):
 
 
 async def out_pins(dut, data):
-    await step(dut, commit=1, op=OP_OUT, out_dest=DEST_PINS, out_data=data)
+    await step(dut, commit=1, is_out=1, out_dest=DEST_PINS, out_data=data)
 
 
 async def side(dut, value, commit=0):
-    await step(dut, commit=commit, op=OP_JMP, sideset_en=1, side_en=1, side_val=value)
+    await step(dut, commit=commit, is_out=0, sideset_en=1, side_en=1, side_val=value)
 
 
 def pins_with(changes):
@@ -106,8 +105,8 @@ async def test_reset_all_high_and_released(dut):
 async def test_holds_without_strobes(dut):
     """Without commit or sideset_en, nothing changes even with data on the inputs."""
     await start(dut, out_base=0, out_count=8, sideset_base=8, sideset_count=5)
-    await step(dut, commit=0, op=OP_OUT, out_data=0x00, side_en=1, side_val=0)
-    await step(dut, commit=0, op=OP_OUT, out_data=0x00, sideset_en=0, side_en=1)
+    await step(dut, commit=0, is_out=1, out_data=0x00, side_en=1, side_val=0)
+    await step(dut, commit=0, is_out=1, out_data=0x00, sideset_en=0, side_en=1)
     assert await now(dut) == ALL_HIGH
 
 
@@ -129,11 +128,10 @@ async def test_out_count_beyond_out_bits_drives_zero(dut):
 
 @cocotb.test()
 async def test_out_to_other_destinations_leaves_pins(dut):
-    """OUT X, and other opcodes whose args look like OUT PINS, never touch the pins."""
+    """OUT X, and other instructions whose args look like OUT PINS, never touch the pins."""
     await start(dut, out_base=0, out_count=8)
-    await step(dut, commit=1, op=OP_OUT, out_dest=DEST_X, out_data=0)
-    for op in (OP_JMP, OP_SET):
-        await step(dut, commit=1, op=op, out_dest=DEST_PINS, out_data=0)
+    await step(dut, commit=1, is_out=1, out_dest=DEST_X, out_data=0)
+    await step(dut, commit=1, is_out=0, out_dest=DEST_PINS, out_data=0)
     assert await now(dut) == ALL_HIGH
 
 
@@ -152,7 +150,7 @@ async def test_side_set(dut):
 async def test_side_set_while_stalled(dut):
     """On a stalled tick side-set applies without commit, so OUT does not."""
     await start(dut, out_base=3, out_count=1, sideset_base=7, sideset_count=1)
-    await step(dut, commit=0, op=OP_OUT, out_data=0, sideset_en=1, side_en=1, side_val=0)
+    await step(dut, commit=0, is_out=1, out_data=0, sideset_en=1, side_en=1, side_val=0)
     assert await now(dut) == pins_with({7: 0})
 
 
@@ -160,7 +158,7 @@ async def test_side_set_while_stalled(dut):
 async def test_side_set_wins_over_out(dut):
     """When OUT and side-set hit the same pin on one edge, side-set wins and OUT keeps the rest."""
     await start(dut, out_base=0, out_count=4, sideset_base=2, sideset_count=1)
-    await step(dut, commit=1, op=OP_OUT, out_data=0b0000, sideset_en=1, side_en=1, side_val=1)
+    await step(dut, commit=1, is_out=1, out_data=0b0000, sideset_en=1, side_en=1, side_val=1)
     assert await now(dut) == pins_with({0: 0, 1: 0, 2: 1, 3: 0})
 
 
@@ -188,7 +186,7 @@ async def test_uart_tx_line(dut):
     for bit in (1, 0, 1, 0, 1, 0, 1, 0):
         await out_pins(dut, bit)
         line.append((await now(dut)) & 1)
-        await step(dut, commit=1, op=OP_JMP)
+        await step(dut, commit=1, is_out=0)
         assert (await now(dut)) & 1 == bit, "JMP must not disturb the TX pin"
     assert line == [1, 0, 1, 0, 1, 0, 1, 0, 1, 0], f"TX line {line}"
 
@@ -210,7 +208,7 @@ async def test_random_against_reference(dut):
         for cycle in range(1000):
             inputs = {
                 "commit": int(rng.random() < 0.5),
-                "op": rng.choice((OP_OUT, OP_OUT, OP_JMP, OP_SET)),
+                "is_out": int(rng.random() < 0.5),
                 "out_dest": rng.choice((DEST_PINS, DEST_PINS, DEST_X)),
                 "out_data": rng.randrange(256),
                 "sideset_en": int(rng.random() < 0.5),

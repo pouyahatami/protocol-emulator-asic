@@ -11,20 +11,19 @@ from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly
 
 CLOCK_PERIOD_NS = 20
 
-OP_JMP, OP_OUT, OP_PUSH_PULL, OP_SET = 0b000, 0b011, 0b100, 0b111
 DEST_PINS, DEST_X, DEST_Y = 0b000, 0b001, 0b010
 COND_ALWAYS, COND_X_DEC = 0b000, 0b010
 
 
-def reference(x, y, commit, op, set_dest, set_data, jmp_cond):
+def reference(x, y, commit, is_jmp, is_set, set_dest, set_data, jmp_cond):
     """Return (x, y) after one clock edge."""
     if not commit:
         return x, y
-    if op == OP_SET and set_dest == DEST_X:
+    if is_set and set_dest == DEST_X:
         return set_data, y
-    if op == OP_SET and set_dest == DEST_Y:
+    if is_set and set_dest == DEST_Y:
         return x, set_data
-    if op == OP_JMP and jmp_cond == COND_X_DEC:
+    if is_jmp and jmp_cond == COND_X_DEC:
         return (x - 1) & 0xFF, y
     return x, y
 
@@ -41,17 +40,19 @@ async def start(dut):
 
 def idle_inputs(dut):
     dut.commit.value = 0
-    dut.op.value = 0
+    dut.is_jmp.value = 0
+    dut.is_set.value = 0
     dut.set_dest.value = 0
     dut.set_data.value = 0
     dut.jmp_cond.value = 0
 
 
-async def step(dut, commit=0, op=0, set_dest=0, set_data=0, jmp_cond=0):
+async def step(dut, commit=0, is_jmp=0, is_set=0, set_dest=0, set_data=0, jmp_cond=0):
     """Drive one cycle's inputs away from the clock edge and return (x, y) during that cycle."""
     await FallingEdge(dut.clk)
     dut.commit.value = commit
-    dut.op.value = op
+    dut.is_jmp.value = is_jmp
+    dut.is_set.value = is_set
     dut.set_dest.value = set_dest
     dut.set_data.value = set_data
     dut.jmp_cond.value = jmp_cond
@@ -64,11 +65,11 @@ async def now(dut):
 
 
 async def set_reg(dut, dest, value):
-    await step(dut, commit=1, op=OP_SET, set_dest=dest, set_data=value)
+    await step(dut, commit=1, is_set=1, set_dest=dest, set_data=value)
 
 
 async def jmp_x_dec(dut):
-    await step(dut, commit=1, op=OP_JMP, jmp_cond=COND_X_DEC)
+    await step(dut, commit=1, is_jmp=1, jmp_cond=COND_X_DEC)
 
 
 @cocotb.test()
@@ -95,9 +96,9 @@ async def test_nothing_changes_without_commit(dut):
     """SET and JMP X-- are ignored on clocks without commit, as between ticks or while stalled."""
     await start(dut)
     await set_reg(dut, DEST_X, 5)
-    await step(dut, commit=0, op=OP_SET, set_dest=DEST_X, set_data=20)
-    await step(dut, commit=0, op=OP_SET, set_dest=DEST_Y, set_data=20)
-    await step(dut, commit=0, op=OP_JMP, jmp_cond=COND_X_DEC)
+    await step(dut, commit=0, is_set=1, set_dest=DEST_X, set_data=20)
+    await step(dut, commit=0, is_set=1, set_dest=DEST_Y, set_data=20)
+    await step(dut, commit=0, is_jmp=1, jmp_cond=COND_X_DEC)
     assert await now(dut) == (5, 0)
 
 
@@ -115,14 +116,14 @@ async def test_jmp_x_dec_wraps(dut):
 
 @cocotb.test()
 async def test_other_instructions_leave_x_and_y(dut):
-    """Unconditional JMP, SET PINS, OUT, and PULL never touch X or Y, even with matching args."""
+    """Unconditional JMP, SET PINS, and commits with neither flag never touch X or Y."""
     await start(dut)
     await set_reg(dut, DEST_X, 9)
     await set_reg(dut, DEST_Y, 3)
-    await step(dut, commit=1, op=OP_JMP, jmp_cond=COND_ALWAYS)
-    await step(dut, commit=1, op=OP_SET, set_dest=DEST_PINS, set_data=1)
-    for op in (OP_OUT, OP_PUSH_PULL):
-        await step(dut, commit=1, op=op, set_dest=DEST_X, set_data=30, jmp_cond=COND_X_DEC)
+    await step(dut, commit=1, is_jmp=1, jmp_cond=COND_ALWAYS)
+    await step(dut, commit=1, is_set=1, set_dest=DEST_PINS, set_data=1)
+    # Like OUT or PULL: args that would match SET X and JMP X--, but neither flag
+    await step(dut, commit=1, set_dest=DEST_X, set_data=30, jmp_cond=COND_X_DEC)
     assert await now(dut) == (9, 3)
 
 
@@ -141,14 +142,16 @@ async def test_uart_tx_bit_counter(dut):
 
 @cocotb.test()
 async def test_random_against_reference(dut):
-    """Random commits of every opcode and field value match the reference."""
+    """Random commits of JMP, SET, and other instructions with every field value match."""
     rng = random.Random(0x5C7A)
     await start(dut)
     x, y = 0, 0
     for cycle in range(10000):
+        kind = rng.choice(("jmp", "set", "other"))
         inputs = {
             "commit": int(rng.random() < 0.5),
-            "op": rng.choice((OP_JMP, OP_SET, OP_OUT, OP_PUSH_PULL, rng.randrange(8))),
+            "is_jmp": int(kind == "jmp"),
+            "is_set": int(kind == "set"),
             "set_dest": rng.randrange(8),
             "set_data": rng.randrange(32),
             "jmp_cond": rng.randrange(8),

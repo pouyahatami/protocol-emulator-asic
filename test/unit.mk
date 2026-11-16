@@ -18,7 +18,8 @@ ifeq ($(UNIT_SOURCE),)
 $(error No source for $(UNIT) under $(SRC_DIR))
 endif
 
-VERILOG_SOURCES     = $(UNIT_SOURCE)
+# Packages in the module's folder must compile before the modules that import them
+VERILOG_SOURCES     = $(wildcard $(dir $(UNIT_SOURCE))*_pkg.sv) $(UNIT_SOURCE)
 # The SM wrapper instantiates every child module in the same folder
 ifeq ($(UNIT),pio_sm)
 VERILOG_SOURCES    += $(wildcard $(dir $(UNIT_SOURCE))pio_sm_*.sv)

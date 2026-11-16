@@ -37,12 +37,12 @@ module pio_sm (
     output logic [23:0] pins_out,
     output logic [23:0] pins_oe,
     output logic        stalled,
-    output logic [4:0]  pc
+    output logic [4:0]  pc,
+    // Sticky. Set when EXEC or STALL sees a v0-illegal instruction. Clears only on reset
+    output logic        unsupported
 );
 
-  localparam logic [2:0] OpJmp     = 3'b000;
-  localparam logic [2:0] JmpAlways = 3'b000;
-  localparam logic [2:0] JmpXDec   = 3'b010;
+  import pio_pkg::*;
 
   logic        tick;
   logic        commit;
@@ -54,8 +54,13 @@ module pio_sm (
   logic        delay_last;
   logic        stall;
   logic        jump_taken;
+  logic        on_instr;
+  logic        unsup_instr;
 
-  logic [2:0]  op;
+  logic        is_jmp;
+  logic        is_out;
+  logic        is_pull;
+  logic        is_set;
   logic        side_en;
   logic [4:0]  side_val;
   logic [4:0]  delay_val;
@@ -65,7 +70,6 @@ module pio_sm (
   logic [4:0]  set_data;
   logic [2:0]  out_dest;
   logic [4:0]  out_bits;
-  logic        is_pull;
   logic        block;
 
   logic [7:0]  x;
@@ -78,8 +82,17 @@ module pio_sm (
   assign stall     = is_pull && block && txf_empty;
   assign txf_pop   = commit && is_pull;
 
+  // Sticky until reset so the host can still see a bad program after disable
+  always_ff @(posedge clk) begin
+    if (!rst_n) begin
+      unsupported <= 1'b0;
+    end else if (enable && on_instr && unsup_instr) begin
+      unsupported <= 1'b1;
+    end
+  end
+
   // The jump reads X before the JMP X-- decrement, because X is a register
-  assign jump_taken = (op == OpJmp) && (
+  assign jump_taken = is_jmp && (
       (jmp_cond == JmpAlways) || ((jmp_cond == JmpXDec) && (x != 8'd0))
   );
 
@@ -93,20 +106,22 @@ module pio_sm (
   );
 
   pio_sm_ctrl u_ctrl (
-      .clk        (clk),
-      .rst_n      (rst_n),
-      .enable     (enable),
-      .tick       (tick),
-      .stall      (stall),
-      .delay_val  (delay_val),
-      .delay_last (delay_last),
-      .commit     (commit),
-      .pc_advance (pc_advance),
-      .sideset_en (sideset_en),
-      .delay_load (delay_load),
-      .delay_dec  (delay_dec),
-      .stalled    (stalled),
-      .active     (active)
+      .clk         (clk),
+      .rst_n       (rst_n),
+      .enable      (enable),
+      .tick        (tick),
+      .stall       (stall),
+      .unsup_instr (unsup_instr),
+      .delay_val   (delay_val),
+      .delay_last  (delay_last),
+      .commit      (commit),
+      .pc_advance  (pc_advance),
+      .sideset_en  (sideset_en),
+      .delay_load  (delay_load),
+      .delay_dec   (delay_dec),
+      .stalled     (stalled),
+      .active      (active),
+      .on_instr    (on_instr)
   );
 
   pio_sm_pc u_pc (
@@ -124,7 +139,10 @@ module pio_sm (
       .instr         (imem_data),
       .sideset_count (sideset_count),
       .sideset_opt   (sideset_opt),
-      .op            (op),
+      .is_jmp        (is_jmp),
+      .is_out        (is_out),
+      .is_pull       (is_pull),
+      .is_set        (is_set),
       .side_en       (side_en),
       .side_val      (side_val),
       .delay_val     (delay_val),
@@ -134,8 +152,8 @@ module pio_sm (
       .set_data      (set_data),
       .out_dest      (out_dest),
       .out_bits      (out_bits),
-      .is_pull       (is_pull),
-      .block         (block)
+      .block         (block),
+      .unsup_instr   (unsup_instr)
   );
 
   pio_sm_delay u_delay (
@@ -151,7 +169,8 @@ module pio_sm (
       .clk      (clk),
       .rst_n    (rst_n),
       .commit   (commit),
-      .op       (op),
+      .is_jmp   (is_jmp),
+      .is_set   (is_set),
       .set_dest (set_dest),
       .set_data (set_data),
       .jmp_cond (jmp_cond),
@@ -163,7 +182,7 @@ module pio_sm (
       .clk         (clk),
       .rst_n       (rst_n),
       .commit      (commit),
-      .op          (op),
+      .is_out      (is_out),
       .is_pull     (is_pull),
       .out_bits    (out_bits),
       .shift_right (shift_right),
@@ -177,7 +196,7 @@ module pio_sm (
       .clk           (clk),
       .rst_n         (rst_n),
       .commit        (commit),
-      .op            (op),
+      .is_out        (is_out),
       .out_dest      (out_dest),
       .out_data      (out_data),
       .sideset_en    (sideset_en),
