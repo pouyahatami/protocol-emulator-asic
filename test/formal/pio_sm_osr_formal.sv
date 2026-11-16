@@ -12,15 +12,12 @@ module pio_sm_osr_formal (
     input logic       clk,
     input logic       rst_n,
     input logic       commit,
-    input logic [2:0] op,
+    input logic       is_out,
     input logic       is_pull,
     input logic [4:0] out_bits,
     input logic       shift_right,
     input logic [7:0] txf_data
 );
-
-  localparam logic [2:0] OpOut      = 3'b011;
-  localparam logic [2:0] OpPushPull = 3'b100;
 
   logic [7:0] osr;
   logic [3:0] osr_count;
@@ -30,7 +27,7 @@ module pio_sm_osr_formal (
       .clk        (clk),
       .rst_n      (rst_n),
       .commit     (commit),
-      .op         (op),
+      .is_out     (is_out),
       .is_pull    (is_pull),
       .out_bits   (out_bits),
       .shift_right(shift_right),
@@ -45,8 +42,8 @@ module pio_sm_osr_formal (
   // Start in reset, so the registers begin from their reset values
   initial assume (!rst_n);
 
-  // The decoder sets is_pull only for the PUSH/PULL opcode, so PULL and OUT never coincide
-  always @(*) assume (!is_pull || (op == OpPushPull));
+  // The decoder raises at most one is_* flag, so PULL and OUT never coincide
+  always @(*) assume (!(is_out && is_pull));
 
   // Reference model: values computed from the spec, independently of the RTL
 
@@ -56,9 +53,9 @@ module pio_sm_osr_formal (
   logic [4:0] f_count_next;
 
   assign f_pull = commit && is_pull;
-  assign f_out  = commit && (op == OpOut);
+  assign f_out  = commit && is_out;
 
-  // The port comment defines out_bits above 8 as acting like 8
+  // The RTL treats out_bits above 8 as 8. The wrapper never commits those values
   assign f_shift = (out_bits > 5'd8) ? 4'd8 : out_bits[3:0];
 
   // OUT adds the shift count to osr_count, saturating at 8

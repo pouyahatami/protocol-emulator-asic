@@ -11,7 +11,9 @@ depth 20
 smtbmc boolector
 
 [script]
-read_verilog -sv -formal pio_sm_ctrl.sv pio_sm_ctrl_formal.sv
+# yosys-slang reads the concurrent SVA that read_verilog rejects
+plugin -i slang
+read_slang pio_sm_ctrl.sv pio_sm_ctrl_formal.sv --top pio_sm_ctrl_formal
 prep -top pio_sm_ctrl_formal
 
 [files]

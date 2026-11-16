@@ -65,6 +65,25 @@ Each harness lives in `test/formal`. The RTL under `src/` is not changed.
    reference such as `dut.delay_cnt`. It creates an undriven wire, which the solver may set to
    any value, and the log shows a warning that the identifier is implicitly declared.
 
+## Concurrent SVA
+
+The `pio_sm_ctrl` harness uses concurrent SystemVerilog Assertions, with a label on each
+statement, such as `p1_enable_low_disables: assert property (...)`. A failing job then names the
+property. Yosys's own `read_verilog` rejects this syntax, so the job reads its files with the
+open-source yosys-slang plugin, which ships with OSS CAD Suite:
+
+```text
+[script]
+plugin -i slang
+read_slang pio_sm_ctrl.sv pio_sm_ctrl_formal.sv --top pio_sm_ctrl_formal
+prep -top pio_sm_ctrl_formal
+```
+
+The plugin accepts `assert property`, `assume property`, and `cover property` with
+`@(posedge clk)`, `disable iff`, and `$past`. It rejects the implication operators `|->` and
+`|=>` and multi-cycle sequences such as `##1`. Write "if A then B" as `!A || B`, and check the
+next cycle by comparing the current cycle with `$past`.
+
 ## Proof modes
 
 | Mode | Result | Limit |
